@@ -152,7 +152,10 @@ def srt_to_ass(srt_text, ass_path, font_key='noto_sans_bn', color='white',
 
     dialogue_lines = []
     for item in items:
-        start, end = [x.strip() for x in item['times'].split('-->')]
+        parts = item['times'].replace('-->', '|').split('|')
+        if len(parts) < 2:
+            continue
+        start, end = parts[0].strip(), parts[1].strip()
         text = item['text'].replace('\n', r'\N')
         text = re.sub(r'<[^>]+>', '', text)
         dialogue_lines.append(
@@ -335,8 +338,15 @@ def process_task(task_id, data):
         else:
             vf_filter = 'scale=1280:-2'
 
+        # CDN 403 fix — headers দিয়ে request করো
+        ffmpeg_input_opts = [
+            '-user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            '-headers', 'Referer: https://www.google.com\r\n',
+        ]
+
         cmd = [
             'ffmpeg', '-y',
+            *ffmpeg_input_opts,
             '-i', video_url,
             '-vf', vf_filter,
             '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23',
