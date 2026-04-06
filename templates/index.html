@@ -95,9 +95,23 @@
   <h1>🎌 AniSub v2</h1>
   <p class="sub">Anime subtitle extractor · Bangla translator · Burner · Uploader</p>
 
-  <label>Episode URL</label>
-  <input type="url" id="source_url" placeholder="https://example.com/episode-1">
-  <p class="hint">ভিডিও + subtitle auto-extract হবে এই URL থেকে।</p>
+  <!-- Video Source Mode -->
+  <div class="tab-bar" style="margin-bottom:.75rem">
+    <button class="tab-btn active" id="modeBtn-auto" onclick="switchMode('auto')">Auto Extract</button>
+    <button class="tab-btn" id="modeBtn-manual" onclick="switchMode('manual')">Direct URL</button>
+  </div>
+
+  <div id="mode-auto">
+    <label>Episode URL</label>
+    <input type="url" id="source_url" placeholder="https://example.com/episode-1">
+    <p class="hint">ভিডিও + subtitle auto-extract হবে।</p>
+  </div>
+
+  <div id="mode-manual" style="display:none">
+    <label>Video URL (m3u8 বা mp4)</label>
+    <input type="url" id="video_url" placeholder="https://cdn.example.com/video.m3u8">
+    <p class="hint">m3u8 দিলে ffmpeg সরাসরি burn করবে — আলাদা download লাগবে না।</p>
+  </div>
 
   <!-- Subtitle Source Tabs -->
   <div class="section-title">Subtitle Source</div>
@@ -236,8 +250,20 @@
       el('stageLabel').textContent = (STAGE_LABELS[stage] || stage) + ` (${pct}%)`;
     }
 
+    let activeMode = 'auto';
+
+    function switchMode(mode) {
+      activeMode = mode;
+      ['auto','manual'].forEach(m => {
+        el('modeBtn-' + m).classList.toggle('active', m === mode);
+        el('mode-' + m).style.display = m === mode ? 'block' : 'none';
+      });
+    }
+
     async function startTask() {
-      const sourceUrl = el('source_url').value.trim();
+      const sourceUrl = activeMode === 'auto' ? (el('source_url').value.trim() || null) : null;
+      const videoUrl  = activeMode === 'manual' ? (el('video_url').value.trim() || null) : null;
+      if (!sourceUrl && !videoUrl) { alert('URL দাও'); return; }
 
       logOffset = 0;
       el('logBox').innerHTML = '';
@@ -270,14 +296,9 @@
         if (!subtitleUrl) { alert('Subtitle URL দাও'); el('startBtn').disabled = false; return; }
       }
 
-      if (!sourceUrl && !subtitleUrl) {
-        alert('Episode URL অথবা Subtitle source দাও');
-        el('startBtn').disabled = false;
-        return;
-      }
-
       const payload = {
         source_url: sourceUrl || null,
+        video_url: videoUrl || null,
         subtitle_url: subtitleUrl || null,
         font_family: el('font_family').value,
         subtitle_size: parseInt(el('subtitle_size').value) || 42,
