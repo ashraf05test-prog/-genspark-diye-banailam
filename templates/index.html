@@ -187,6 +187,24 @@
     </div>
   </div>
 
+  <!-- Post Info -->
+  <div class="section-title">Post Info</div>
+  <div class="row">
+    <div>
+      <label>Anime নাম (Title)</label>
+      <input type="text" id="anime_title" placeholder="যেমন: Demon Slayer">
+    </div>
+    <div>
+      <label>Episode নম্বর</label>
+      <input type="text" id="episode_no" placeholder="যেমন: EP 01">
+    </div>
+  </div>
+  <label>Caption</label>
+  <input type="text" id="caption" placeholder="যেমন: বাংলা সাবটাইটেল সহ দেখুন...">
+  <label>Hashtag</label>
+  <input type="text" id="hashtags" placeholder="যেমন: #anime #bangla #animesub">
+  <p class="hint">Telegram ও Facebook — দুইটাতেই এই তথ্য যাবে।</p>
+
   <!-- Options -->
   <div class="section-title">Options</div>
   <div class="checks">
@@ -271,6 +289,21 @@
       });
     }
 
+    function buildTitle() {
+      const name = el('anime_title').value.trim();
+      const ep   = el('episode_no').value.trim();
+      if (name && ep) return `${name} — ${ep}`;
+      if (name) return name;
+      if (ep) return ep;
+      return 'AniSub Video';
+    }
+
+    function buildCaption() {
+      const caption  = el('caption').value.trim();
+      const hashtags = el('hashtags').value.trim();
+      return [caption, hashtags].filter(Boolean).join(' ');
+    }
+
     async function startTask() {
       const sourceUrl = activeMode === 'auto' ? (el('source_url').value.trim() || null) : null;
       const videoUrl  = activeMode === 'manual' ? (el('video_url').value.trim() || null) : null;
@@ -322,6 +355,8 @@
         subtitle_bold: el('subtitle_bold').checked,
         subtitle_italic: el('subtitle_italic').checked,
         translate_to_bn: shouldTranslate,
+        tg_title: buildTitle(),
+        tg_caption: buildCaption(),
         upload_targets: [
           ...(el('upload_tg').checked ? ['telegram'] : []),
           ...(el('upload_fb').checked ? ['facebook'] : []),
