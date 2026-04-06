@@ -327,11 +327,16 @@
         fd.append('subtitle_file', file);
         try {
           const r = await fetch('/upload_subtitle', { method: 'POST', body: fd });
+          if (!r.ok) {
+            const err = await r.text();
+            throw new Error('Server error: ' + err);
+          }
           const d = await r.json();
+          if (!d.subtitle_path) throw new Error('No path returned');
           subtitleUrl = d.subtitle_path;
           appendLog([{ icon: 'ℹ️', message: 'Subtitle uploaded: ' + file.name }]);
         } catch (e) {
-          appendLog([{ icon: '❌', message: 'Subtitle upload failed: ' + e }]);
+          appendLog([{ icon: '❌', message: 'Subtitle upload failed: ' + e.message }]);
           el('startBtn').disabled = false;
           return;
         }
