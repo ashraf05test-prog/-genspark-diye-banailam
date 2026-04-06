@@ -262,6 +262,7 @@ def process_task(task_id, data):
 
         # ── Download subtitle (optional) ──────────────────────────
         srt_text = None
+        ass_path_direct = None  # .ass file সরাসরি দিলে
         if subtitle_url:
             task['stage'] = 'download'
             task['progress'] = 10
@@ -273,14 +274,20 @@ def process_task(task_id, data):
                 subtitle_text = download_text(subtitle_url)
                 log(task, 'Subtitle downloaded', '⬇️')
 
-            if subtitle_url.lower().endswith('.vtt') or subtitle_text.lstrip().startswith('WEBVTT'):
+            # .ass file হলে সরাসরি use করো — convert দরকার নেই
+            if subtitle_url.lower().endswith('.ass') or subtitle_text.lstrip().startswith('[Script Info]'):
+                ass_path_direct = str(work_dir / 'subtitle.ass')
+                Path(ass_path_direct).write_text(subtitle_text, encoding='utf-8')
+                log(task, 'ASS subtitle loaded directly', '🎨')
+            elif subtitle_url.lower().endswith('.vtt') or subtitle_text.lstrip().startswith('WEBVTT'):
                 srt_text = convert_vtt_to_srt(subtitle_text)
                 log(task, 'VTT → SRT converted', '🔁')
             else:
                 srt_text = subtitle_text
 
-            original_srt_path = work_dir / 'original.srt'
-            original_srt_path.write_text(srt_text, encoding='utf-8')
+            if srt_text:
+                original_srt_path = work_dir / 'original.srt'
+                original_srt_path.write_text(srt_text, encoding='utf-8')
         else:
             log(task, 'No subtitle — video only mode', 'ℹ️')
 
@@ -309,7 +316,7 @@ def process_task(task_id, data):
         # ── ASS subtitle ──────────────────────────────────────────
         task['stage'] = 'process'
         task['progress'] = 50
-        ass_path = None
+        ass_path = ass_path_direct  # .ass সরাসরি দিলে এটাই use হবে
         if translated_srt:
             ass_path = str(work_dir / 'subtitle.ass')
             srt_to_ass(
@@ -487,6 +494,18 @@ def upload_subtitle_route():
     file = request.files['subtitle_file']
     dest = TMP_DIR / f"{uuid.uuid4().hex[:8]}_{file.filename}"
     file.save(dest)
+    return jsonify({'ok': True, 'subtitle_path': str(dest)})
+
+
+@app.route('/upload_subtitle_text', methods=['POST'])
+def upload_subtitle_text_route():
+    data = request.get_json(force=True)
+    filename = data.get('filename', 'subtitle.srt')
+    content = data.get('content', '')
+    if not content:
+        return jsonify({'error': 'No content'}), 400
+    dest = TMP_DIR / f"{uuid.uuid4().hex[:8]}_{filename}"
+    dest.write_text(content, encoding='utf-8')
     return jsonify({'ok': True, 'subtitle_path': str(dest)})
 
 
