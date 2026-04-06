@@ -239,26 +239,37 @@ def process_task(task_id, data):
         subtitle_url = data.get('subtitle_url')
         cookie_path = data.get('cookie_path')
 
-        # ── Extract ───────────────────────────────────────────────
-        if source_url and (not video_url or not subtitle_url):
+        # ── Extract (video_url সরাসরি দিলে extractor skip) ──────
+        if video_url:
+            # Direct URL mode — extractor বাদ, সরাসরি ffmpeg এ যাবে
+            log(task, f'Direct video: {video_url[:80]}...', '🔗')
+        elif source_url:
             result = extract_sources(source_url, cookie_path=cookie_path)
-            video_url = video_url or result.get('video_url') or result.get('m3u8_url')
+            video_url = result.get('video_url') or result.get('m3u8_url')
             if not subtitle_url and result.get('subtitles'):
                 subtitle_url = result['subtitles'][0]['url']
             task['extract_result'] = result
-            log(task, f'Video: {video_url}', '🔎')
-            log(task, f'Subtitle: {subtitle_url}', '📝')
+            log(task, f'Extracted video: {video_url}', '🔎')
+            log(task, f'Extracted subtitle: {subtitle_url}', '📝')
+        else:
+            raise RuntimeError('Video URL বা Episode URL দাও')
 
         if not video_url:
             raise RuntimeError('No video URL found')
         if not subtitle_url:
-            raise RuntimeError('No subtitle URL found')
+            raise RuntimeError('Subtitle URL বা File দাও')
 
         # ── Download subtitle ─────────────────────────────────────
         task['stage'] = 'download'
         task['progress'] = 10
-        subtitle_text = download_text(subtitle_url)
-        log(task, 'Subtitle downloaded', '⬇️')
+
+        # subtitle_url local file path হতে পারে (file upload করলে)
+        if subtitle_url.startswith('/'):
+            subtitle_text = open(subtitle_url, encoding='utf-8').read()
+            log(task, 'Subtitle loaded from uploaded file', '📂')
+        else:
+            subtitle_text = download_text(subtitle_url)
+            log(task, 'Subtitle downloaded', '⬇️')
 
         if subtitle_url.lower().endswith('.vtt') or subtitle_text.lstrip().startswith('WEBVTT'):
             srt_text = convert_vtt_to_srt(subtitle_text)
