@@ -229,6 +229,17 @@
         document.querySelectorAll('.tab-btn')[i].classList.toggle('active', t === tab);
         el('tab-' + t).classList.toggle('active', t === tab);
       });
+      // file mode হলে translate checkbox disable + uncheck
+      const translateCb = el('translate_to_bn');
+      if (tab === 'file') {
+        translateCb.checked = false;
+        translateCb.disabled = true;
+        translateCb.parentElement.style.opacity = '0.4';
+      } else {
+        translateCb.checked = true;
+        translateCb.disabled = false;
+        translateCb.parentElement.style.opacity = '1';
+      }
     }
 
     function appendLog(entries) {
@@ -296,6 +307,9 @@
         if (!subtitleUrl) { alert('Subtitle URL দাও'); el('startBtn').disabled = false; return; }
       }
 
+      // file upload হলে translate বন্ধ, বাকি সব ক্ষেত্রে checkbox অনুযায়ী
+      const shouldTranslate = activeTab === 'file' ? false : el('translate_to_bn').checked;
+
       const payload = {
         source_url: sourceUrl || null,
         video_url: videoUrl || null,
@@ -307,7 +321,7 @@
         subtitle_background: el('subtitle_background').value,
         subtitle_bold: el('subtitle_bold').checked,
         subtitle_italic: el('subtitle_italic').checked,
-        translate_to_bn: el('translate_to_bn').checked,
+        translate_to_bn: shouldTranslate,
         upload_targets: [
           ...(el('upload_tg').checked ? ['telegram'] : []),
           ...(el('upload_fb').checked ? ['facebook'] : []),
