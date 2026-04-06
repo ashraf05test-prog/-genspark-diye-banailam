@@ -256,77 +256,89 @@ def process_task(task_id, data):
 
         if not video_url:
             raise RuntimeError('No video URL found')
-        if not subtitle_url:
-            raise RuntimeError('Subtitle URL বা File দাও')
 
-        # ── Download subtitle ─────────────────────────────────────
-        task['stage'] = 'download'
-        task['progress'] = 10
+        # ── Download subtitle (optional) ──────────────────────────
+        srt_text = None
+        if subtitle_url:
+            task['stage'] = 'download'
+            task['progress'] = 10
 
-        # subtitle_url local file path হতে পারে (file upload করলে)
-        if subtitle_url.startswith('/'):
-            subtitle_text = open(subtitle_url, encoding='utf-8').read()
-            log(task, 'Subtitle loaded from uploaded file', '📂')
+            if subtitle_url.startswith('/'):
+                subtitle_text = open(subtitle_url, encoding='utf-8').read()
+                log(task, 'Subtitle loaded from uploaded file', '📂')
+            else:
+                subtitle_text = download_text(subtitle_url)
+                log(task, 'Subtitle downloaded', '⬇️')
+
+            if subtitle_url.lower().endswith('.vtt') or subtitle_text.lstrip().startswith('WEBVTT'):
+                srt_text = convert_vtt_to_srt(subtitle_text)
+                log(task, 'VTT → SRT converted', '🔁')
+            else:
+                srt_text = subtitle_text
+
+            original_srt_path = work_dir / 'original.srt'
+            original_srt_path.write_text(srt_text, encoding='utf-8')
         else:
-            subtitle_text = download_text(subtitle_url)
-            log(task, 'Subtitle downloaded', '⬇️')
-
-        if subtitle_url.lower().endswith('.vtt') or subtitle_text.lstrip().startswith('WEBVTT'):
-            srt_text = convert_vtt_to_srt(subtitle_text)
-            log(task, 'VTT → SRT converted', '🔁')
-        else:
-            srt_text = subtitle_text
-
-        original_srt_path = work_dir / 'original.srt'
-        original_srt_path.write_text(srt_text, encoding='utf-8')
+            log(task, 'No subtitle — video only mode', 'ℹ️')
 
         # ── Translate ─────────────────────────────────────────────
-        task['stage'] = 'translate'
-        task['progress'] = 30
-        translate_to_bn = bool(data.get('translate_to_bn', True))
-        if translate_to_bn:
-            translated_srt = translate_srt_text(
-                srt_text,
-                gemini_api_key=data.get('gemini_api_key') or os.environ.get('GEMINI_API_KEY'),
-                grok_api_key=data.get('grok_api_key') or os.environ.get('XAI_API_KEY'),
-                batch_size=int(data.get('batch_size', 20)),
-            )
-            log(task, 'Subtitle translated to Bangla', '🇧🇩')
-        else:
-            translated_srt = srt_text
-            log(task, 'Translation skipped', '⏭️')
+        translated_srt = None
+        if srt_text:
+            task['stage'] = 'translate'
+            task['progress'] = 30
+            translate_to_bn = bool(data.get('translate_to_bn', True))
+            if translate_to_bn:
+                translated_srt = translate_srt_text(
+                    srt_text,
+                    gemini_api_key=data.get('gemini_api_key') or os.environ.get('GEMINI_API_KEY'),
+                    grok_api_key=data.get('grok_api_key') or os.environ.get('XAI_API_KEY'),
+                    batch_size=int(data.get('batch_size', 20)),
+                )
+                log(task, 'Subtitle translated to Bangla', '🇧🇩')
+            else:
+                translated_srt = srt_text
+                log(task, 'Translation skipped', '⏭️')
 
-        translated_srt_path = work_dir / 'translated.srt'
-        translated_srt_path.write_text(translated_srt, encoding='utf-8')
+            translated_srt_path = work_dir / 'translated.srt'
+            translated_srt_path.write_text(translated_srt, encoding='utf-8')
+            task['translated_srt_path'] = str(translated_srt_path)
 
         # ── ASS subtitle ──────────────────────────────────────────
         task['stage'] = 'process'
         task['progress'] = 50
-        ass_path = str(work_dir / 'subtitle.ass')
-        srt_to_ass(
-            translated_srt, ass_path,
-            font_key=data.get('font_family', 'noto_sans_bn'),
-            color=data.get('subtitle_color', 'white'),
-            position=data.get('subtitle_position', 'bottom'),
-            background=data.get('subtitle_background', 'semi-transparent'),
-            bold=bool(data.get('subtitle_bold', False)),
-            italic=bool(data.get('subtitle_italic', False)),
-            font_size=int(data.get('subtitle_size', 42)),
-        )
-        log(task, 'ASS subtitle prepared', '🎨')
+        ass_path = None
+        if translated_srt:
+            ass_path = str(work_dir / 'subtitle.ass')
+            srt_to_ass(
+                translated_srt, ass_path,
+                font_key=data.get('font_family', 'noto_sans_bn'),
+                color=data.get('subtitle_color', 'white'),
+                position=data.get('subtitle_position', 'bottom'),
+                background=data.get('subtitle_background', 'semi-transparent'),
+                bold=bool(data.get('subtitle_bold', False)),
+                italic=bool(data.get('subtitle_italic', False)),
+                font_size=int(data.get('subtitle_size', 42)),
+            )
+            log(task, 'ASS subtitle prepared', '🎨')
 
         # ── ffmpeg render (live progress) ─────────────────────────
         final_video_path = str(work_dir / 'final.mp4')
         fonts_dir = ensure_fonts_dir()
-        ass_filter = (
-            f"scale=1280:-2,"
-            f"ass='{ffmpeg_escape_filter_path(ass_path)}':"
-            f"fontsdir='{ffmpeg_escape_filter_path(fonts_dir)}'"
-        )
+
+        # subtitle আছে কিনা দেখে filter বানাও
+        if ass_path:
+            vf_filter = (
+                f"scale=1280:-2,"
+                f"ass='{ffmpeg_escape_filter_path(ass_path)}':"
+                f"fontsdir='{ffmpeg_escape_filter_path(fonts_dir)}'"
+            )
+        else:
+            vf_filter = 'scale=1280:-2'
+
         cmd = [
             'ffmpeg', '-y',
             '-i', video_url,
-            '-vf', ass_filter,
+            '-vf', vf_filter,
             '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23',
             '-c:a', 'aac', '-b:a', '128k',
             final_video_path,
@@ -342,7 +354,6 @@ def process_task(task_id, data):
         log(task, 'Video render complete', '✅')
         task['progress'] = 75
         task['final_video_path'] = final_video_path
-        task['translated_srt_path'] = str(translated_srt_path)
         task['ass_path'] = ass_path
 
         # ── Upload ────────────────────────────────────────────────
